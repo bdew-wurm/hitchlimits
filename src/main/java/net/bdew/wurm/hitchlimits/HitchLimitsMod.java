@@ -19,6 +19,7 @@ public class HitchLimitsMod implements WurmServerMod, Initable, Configurable {
 
     static float maxHitchableRating = 1;
     static float hitchingStrengthModifier = 1;
+    static float minimumStrengthCap = 1;
 
     public static void logException(String msg, Throwable e) {
         if (logger != null)
@@ -39,8 +40,10 @@ public class HitchLimitsMod implements WurmServerMod, Initable, Configurable {
     public void configure(Properties properties) {
         maxHitchableRating = Float.parseFloat(properties.getProperty("maxHitchableRating"));
         hitchingStrengthModifier = Float.parseFloat(properties.getProperty("hitchingStrengthModifier"));
-        logInfo("maxHitchableRating = "+maxHitchableRating);
-        logInfo("hitchingStrengthModifier = "+hitchingStrengthModifier);
+        minimumStrengthCap = Float.parseFloat(properties.getProperty("minimumStrengthCap"));
+        logInfo("maxHitchableRating = " + maxHitchableRating);
+        logInfo("hitchingStrengthModifier = " + hitchingStrengthModifier);
+        logInfo("minimumStrengthCap = " + minimumStrengthCap);
     }
 
     @Override
@@ -62,6 +65,19 @@ public class HitchLimitsMod implements WurmServerMod, Initable, Configurable {
                     } else if (m.getMethodName().equals("isStrongEnoughToDrag")) {
                         m.replace("$_ = net.bdew.wurm.hitchlimits.HitchHooks.isStrongEnoughToDrag($1,$2);");
                         logInfo(String.format("Hooked strength check in %s.%s at %d",
+                                m.where().getDeclaringClass().getName(),
+                                m.where().getMethodInfo().getName(),
+                                m.getLineNumber()));
+                    }
+                }
+            });
+
+            classPool.getCtClass("com.wurmonline.server.behaviours.Vehicle").getMethod("calculateNewVehicleSpeed", "(Z)B").instrument(new ExprEditor() {
+                @Override
+                public void edit(MethodCall m) throws CannotCompileException {
+                    if (m.getMethodName().equals("getStrengthSkill")) {
+                        m.replace("$_ = net.bdew.wurm.hitchlimits.HitchHooks.getStrengthSkill($0);");
+                        logInfo(String.format("Hooked getStrengthSkill in %s.%s at %d",
                                 m.where().getDeclaringClass().getName(),
                                 m.where().getMethodInfo().getName(),
                                 m.getLineNumber()));
