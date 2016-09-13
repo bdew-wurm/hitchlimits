@@ -20,6 +20,8 @@ public class HitchLimitsMod implements WurmServerMod, Initable, Configurable {
     static float maxHitchableRating = 1;
     static float hitchingStrengthModifier = 1;
     static float minimumStrengthCap = 1;
+    static private boolean preventUnhitchingExPets = false;
+    static private boolean pacifyHitchedCreatures = false;
 
     public static void logException(String msg, Throwable e) {
         if (logger != null)
@@ -41,9 +43,13 @@ public class HitchLimitsMod implements WurmServerMod, Initable, Configurable {
         maxHitchableRating = Float.parseFloat(properties.getProperty("maxHitchableRating"));
         hitchingStrengthModifier = Float.parseFloat(properties.getProperty("hitchingStrengthModifier"));
         minimumStrengthCap = Float.parseFloat(properties.getProperty("minimumStrengthCap"));
+        preventUnhitchingExPets = Boolean.parseBoolean(properties.getProperty("preventUnhitchingExPets"));
+        pacifyHitchedCreatures = Boolean.parseBoolean(properties.getProperty("pacifyHitchedCreatures"));
         logInfo("maxHitchableRating = " + maxHitchableRating);
         logInfo("hitchingStrengthModifier = " + hitchingStrengthModifier);
         logInfo("minimumStrengthCap = " + minimumStrengthCap);
+        logInfo("preventUnhitchingExPets = " + preventUnhitchingExPets);
+        logInfo("pacifyHitchedCreatures = " + pacifyHitchedCreatures);
     }
 
     @Override
@@ -72,7 +78,9 @@ public class HitchLimitsMod implements WurmServerMod, Initable, Configurable {
                 }
             });
 
-            classPool.getCtClass("com.wurmonline.server.behaviours.Vehicle").getMethod("calculateNewVehicleSpeed", "(Z)B").instrument(new ExprEditor() {
+            CtClass ctVehicle = classPool.getCtClass("com.wurmonline.server.behaviours.Vehicle");
+
+            ctVehicle.getMethod("calculateNewVehicleSpeed", "(Z)B").instrument(new ExprEditor() {
                 @Override
                 public void edit(MethodCall m) throws CannotCompileException {
                     if (m.getMethodName().equals("getStrengthSkill")) {
@@ -84,6 +92,29 @@ public class HitchLimitsMod implements WurmServerMod, Initable, Configurable {
                     }
                 }
             });
+
+            CtClass ctCreature = classPool.getCtClass("com.wurmonline.server.creatures.Creature");
+
+            if (preventUnhitchingExPets) {
+                ctCreature.getMethod("setKingdomId", "(BZZZ)Z").instrument(new ExprEditor() {
+                    @Override
+                    public void edit(MethodCall m) throws CannotCompileException {
+                        if (m.getMethodName().equals("setCreatureDead")) {
+                            m.replace("net.bdew.wurm.hitchlimits.HitchHooks.setCreatureDeadMaybe($1);");
+                            logInfo(String.format("Hooked setCreatureDead in %s.%s at %d",
+                                    m.where().getDeclaringClass().getName(),
+                                    m.where().getMethodInfo().getName(),
+                                    m.getLineNumber()));
+                        }
+                    }
+                });
+            }
+
+            if (pacifyHitchedCreatures) {
+                ctCreature.getMethod("getAttitude", "(Lcom/wurmonline/server/creatures/Creature;)B")
+                        .insertAfter("$_=net.bdew.wurm.hitchlimits.HitchHooks.getAttitudeHook(this,$1,$_);");
+            }
+
         } catch (Throwable e) {
             throw new RuntimeException(e);
         }
