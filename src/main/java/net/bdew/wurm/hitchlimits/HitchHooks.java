@@ -23,10 +23,15 @@ public class HitchHooks {
     }
 
     public static byte getAttitudeHook(Creature from, Creature to, byte original) {
-        if (original!=2) return original;
+        if (original != 2) return original;
         if (from.target == to.getWurmId() || to.target == from.getWurmId()) return 2;
         if (from.isHitched() && to.isPlayer()) return 0;
         if (from.isPlayer() && to.isHitched()) return 0;
         return 2;
+    }
+
+    public static boolean canAgePollUnhitch(Creature creature) {
+        return !creature.isDomestic() && !HitchLimitsMod.preventAgeUnhitching &&
+                creature.getStatus().getBattleRatingTypeModifier() > HitchLimitsMod.maxHitchableRating;
     }
 }

@@ -20,8 +20,9 @@ public class HitchLimitsMod implements WurmServerMod, Initable, Configurable {
     static float maxHitchableRating = 1;
     static float hitchingStrengthModifier = 1;
     static float minimumStrengthCap = 1;
-    static private boolean preventUnhitchingExPets = false;
-    static private boolean pacifyHitchedCreatures = false;
+    static boolean preventUnhitchingExPets = false;
+    static boolean pacifyHitchedCreatures = false;
+    static boolean preventAgeUnhitching = false;
 
     public static void logException(String msg, Throwable e) {
         if (logger != null)
@@ -45,11 +46,13 @@ public class HitchLimitsMod implements WurmServerMod, Initable, Configurable {
         minimumStrengthCap = Float.parseFloat(properties.getProperty("minimumStrengthCap"));
         preventUnhitchingExPets = Boolean.parseBoolean(properties.getProperty("preventUnhitchingExPets"));
         pacifyHitchedCreatures = Boolean.parseBoolean(properties.getProperty("pacifyHitchedCreatures"));
+        preventAgeUnhitching = Boolean.parseBoolean(properties.getProperty("preventAgeUnhitching"));
         logInfo("maxHitchableRating = " + maxHitchableRating);
         logInfo("hitchingStrengthModifier = " + hitchingStrengthModifier);
         logInfo("minimumStrengthCap = " + minimumStrengthCap);
         logInfo("preventUnhitchingExPets = " + preventUnhitchingExPets);
         logInfo("pacifyHitchedCreatures = " + pacifyHitchedCreatures);
+        logInfo("preventAgeUnhitching = " + preventAgeUnhitching);
     }
 
     @Override
@@ -114,6 +117,22 @@ public class HitchLimitsMod implements WurmServerMod, Initable, Configurable {
                 ctCreature.getMethod("getAttitude", "(Lcom/wurmonline/server/creatures/Creature;)B")
                         .insertAfter("$_=net.bdew.wurm.hitchlimits.HitchHooks.getAttitudeHook(this,$1,$_);");
             }
+
+            CtClass ctCreatureStatus = classPool.getCtClass("com.wurmonline.server.creatures.CreatureStatus");
+
+            ctCreatureStatus.getMethod("pollAge", "(I)Z").instrument(new ExprEditor() {
+                @Override
+                public void edit(MethodCall m) throws CannotCompileException {
+                    if (m.getMethodName().equals("isDomestic")) {
+                        m.replace("$_ = !net.bdew.wurm.hitchlimits.HitchHooks.canAgePollUnhitch(this.statusHolder);");
+                        logInfo(String.format("Hooked age-based unhitch check in %s.%s at %d",
+                                m.where().getDeclaringClass().getName(),
+                                m.where().getMethodInfo().getName(),
+                                m.getLineNumber()));
+                    }
+                }
+            });
+
 
         } catch (Throwable e) {
             throw new RuntimeException(e);
